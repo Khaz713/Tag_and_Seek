@@ -17,5 +17,5 @@ CREATE TABLE game_users (
 );
 
 -- +goose Down
-DROP TABLE games_users;
+DROP TABLE game_users;
 DROP TABLE games;

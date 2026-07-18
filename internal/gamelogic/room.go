@@ -23,6 +23,7 @@ type ServerPlayer struct {
 	Y            int
 	IsSeeker     bool
 	IsPlaying    bool
+	BeenSeeker   bool
 	LastMoveTime time.Time
 }
 
@@ -33,6 +34,7 @@ type GameRoom struct {
 	State      routing.RoomState
 	GameWinner string
 	Size       int
+	Round      int
 }
 
 func (room *GameRoom) findSpawnPoint() (int, int) {
@@ -70,6 +72,7 @@ func (room *GameRoom) AddPlayer(playerID string) {
 		Y:            y,
 		IsSeeker:     isFirstPlayer,
 		IsPlaying:    true,
+		BeenSeeker:   isFirstPlayer,
 		LastMoveTime: time.Now(),
 	}
 
@@ -96,7 +99,7 @@ func (room *GameRoom) MovePlayer(playerID string, dx, dy int) error {
 		return errors.New("cannot move: movement on cooldown")
 	}
 
-	newX := player.X + dx //calculates new position
+	newX := player.X + dx + 1 //calculates new position
 	newY := player.Y + dy
 
 	//check if new position is in the bounds of the map
@@ -140,6 +143,11 @@ func (room *GameRoom) checkIfTagged() { //checks if any of the hiders has been t
 		}
 	}
 
+	if seeker == nil { //seeker left the room
+		room.State = routing.StateRoundEnd
+		return
+	}
+
 	for _, hider := range hiders {
 		dx := math.Abs(float64(seeker.X - hider.X))
 		dy := math.Abs(float64(seeker.Y - hider.Y))
@@ -149,7 +157,7 @@ func (room *GameRoom) checkIfTagged() { //checks if any of the hiders has been t
 		}
 	}
 	if len(hiders) == 0 {
-		room.State = routing.StateEnded
+		room.State = routing.StateRoundEnd
 		return
 	}
 }
@@ -193,4 +201,46 @@ func (room *GameRoom) GetStateForPlayer(playerID string) routing.GameStateUpdate
 		State:   room.State,
 		Players: visiblePlayers,
 	}
+}
+
+func (room *GameRoom) RemovePlayer(playerID string) {
+	player, exists := room.Players[playerID]
+	if !exists {
+		return
+	}
+	wasSeeker := player.IsSeeker
+	if room.State == routing.StateLobby {
+		delete(room.Players, playerID)
+		if len(room.Players) == 1 { //close the room if no players are left
+			//TODO close the room
+			return
+		}
+		if wasSeeker { //if the player was the seeker, select a new seeker at random from remaining players
+			for k := range room.Players {
+				if !room.Players[k].BeenSeeker {
+					room.Players[k].IsSeeker = true
+					room.Players[k].BeenSeeker = true
+					break
+				}
+			}
+		}
+	} else if room.State == routing.StatePlaying {
+		delete(room.Players, playerID)
+		room.checkIfTagged()
+	} else if room.State == routing.StateRoundEnd { //if player leaves in between rounds we need to check if they were the seeker and select a new seeker
+		if room.Size != room.Round && wasSeeker { //if player leaves the room after the last round finished it doesn't matter
+			delete(room.Players, playerID)
+			if wasSeeker {
+				for k := range room.Players {
+					if !room.Players[k].BeenSeeker {
+						room.Players[k].IsSeeker = true
+						room.Players[k].BeenSeeker = true
+						break
+					}
+				}
+			}
+
+		}
+	}
+	// if player leaves the room and game state ending it doesn't matter
 }

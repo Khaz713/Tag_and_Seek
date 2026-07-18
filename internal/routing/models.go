@@ -1,7 +1,5 @@
 package routing
 
-import "time"
-
 type PlayerCommand struct { //the command that player sends to the server
 	PlayerID string
 	RoomID   string
@@ -9,19 +7,21 @@ type PlayerCommand struct { //the command that player sends to the server
 }
 
 type PlayerState struct {
-	ID        string
-	X         int
-	Y         int
-	IsSeeker  bool
-	IsPlaying bool
+	ID         string
+	X          int
+	Y          int
+	IsSeeker   bool
+	IsPlaying  bool
+	BeenSeeker bool
 }
 
 type RoomState string
 
 const (
-	StateLobby   RoomState = "LOBBY"
-	StatePlaying RoomState = "PLAYING"
-	StateEnded   RoomState = "ENDED"
+	StateLobby    RoomState = "LOBBY"
+	StatePlaying  RoomState = "PLAYING"
+	StateRoundEnd RoomState = "ROUND_END"
+	StateEnded    RoomState = "ENDED"
 )
 
 type GameStateUpdate struct {
@@ -32,10 +32,13 @@ type GameStateUpdate struct {
 	GameWinner string
 }
 
-type MatchResult struct {
-	RoomID   string
-	WinnerID string
-	LooserID []string
+type PlayerEnd struct {
+	PlayerID string
 	Duration int
-	EndedAt  time.Time
+	Ranking  int
+}
+type GameResult struct {
+	WinnerID PlayerEnd
+	LooserID []PlayerEnd
+	Duration int
 }
