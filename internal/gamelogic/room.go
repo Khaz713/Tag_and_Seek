@@ -228,7 +228,7 @@ func (room *GameRoom) RemovePlayer(playerID string) {
 		delete(room.Players, playerID)
 		room.checkIfTagged()
 	} else if room.State == routing.StateRoundEnd { //if player leaves in between rounds we need to check if they were the seeker and select a new seeker
-		if room.Size != room.Round && wasSeeker { //if player leaves the room after the last round finished it doesn't matter
+		if room.Size != room.Round { //if player leaves the room after the last round finished it doesn't matter
 			delete(room.Players, playerID)
 			if wasSeeker {
 				for k := range room.Players {

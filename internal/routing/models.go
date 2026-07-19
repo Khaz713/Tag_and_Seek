@@ -42,3 +42,13 @@ type GameResult struct {
 	LooserID []PlayerEnd
 	Duration int
 }
+
+type RegisterRequest struct {
+	Username string
+	Password string
+}
+
+type RegisterResponse struct {
+	UserId   string
+	Username string
+}
