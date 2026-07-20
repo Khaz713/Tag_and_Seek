@@ -47,12 +47,13 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/register", cfg.handlerRegister)
+	mux.HandleFunc("POST /api/login", cfg.handlerLogin)
 
 	if port == "" {
 		port = "8080"
 	}
 	srv := &http.Server{
-		Addr:    ":" + port,
+		Addr:    "0.0.0.0:" + port,
 		Handler: mux,
 	}
 	log.Fatal(srv.ListenAndServe())

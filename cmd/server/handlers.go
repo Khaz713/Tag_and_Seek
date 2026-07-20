@@ -1,11 +1,10 @@
 package main
 
 import (
-	"io"
+	"database/sql"
 	"net/http"
 
 	"github.com/Khaz713/Tag_and_Seek/internal/database"
-	pubsub2 "github.com/Khaz713/Tag_and_Seek/internal/pubsub"
 	"github.com/lib/pq"
 	"golang.org/x/crypto/bcrypt"
 
@@ -13,23 +12,11 @@ import (
 )
 
 func (cfg *apiConfig) handlerRegister(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	defer r.Body.Close()
-
-	bodyBytes, err := io.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, "Failed to read body", http.StatusBadRequest)
+	req, ok := decodeRequestGob[routing.RegisterRequest](w, r)
+	if !ok {
 		return
 	}
 
-	req, err := pubsub2.DecodeGob[routing.RegisterRequest](bodyBytes)
-	if err != nil {
-		http.Error(w, "Failed to decode body", http.StatusBadRequest)
-		return
-	}
 	passwordHash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		http.Error(w, "Failed to generate password hash", http.StatusInternalServerError)
@@ -49,21 +36,50 @@ func (cfg *apiConfig) handlerRegister(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to create user", http.StatusInternalServerError)
 		return
 	}
+	session, err := cfg.db.CreateSession(r.Context(), newUser.ID)
+	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
 
-	resp, err := pubsub2.EncodeGob(routing.RegisterResponse{
-		UserId:   newUser.ID.String(),
+	writeResponseGob[routing.RegisterResponse](w, http.StatusCreated, routing.RegisterResponse{
+		UserID:   newUser.ID.String(),
+		Token:    session.Token.String(),
 		Username: newUser.Username,
 	})
-	if err != nil {
-		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+
+}
+
+func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
+	req, ok := decodeRequestGob[routing.RegisterRequest](w, r)
+	if !ok {
 		return
 	}
-	w.Header().Set("Content-Type", "application/octet-stream")
-	w.WriteHeader(http.StatusCreated)
-	_, err = w.Write(resp)
+
+	user, err := cfg.db.GetUserByUsername(r.Context(), req.Username)
 	if err != nil {
-		http.Error(w, "Failed to write response", http.StatusInternalServerError)
+		if err == sql.ErrNoRows {
+			http.Error(w, "Invalid username or password", http.StatusUnauthorized)
+			return
+		}
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
+	err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password))
+	if err != nil {
+		http.Error(w, "Invalid username or password", http.StatusUnauthorized)
+		return
+	}
+	session, err := cfg.db.CreateSession(r.Context(), user.ID)
+	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	writeResponseGob[routing.RegisterResponse](w, http.StatusOK, routing.RegisterResponse{
+		UserID:   user.ID.String(),
+		Token:    session.Token.String(),
+		Username: user.Username,
+	})
 
 }

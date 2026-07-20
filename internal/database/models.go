@@ -25,6 +25,12 @@ type GameUser struct {
 	Ranking       int32
 }
 
+type Session struct {
+	Token     uuid.UUID
+	UserID    uuid.UUID
+	ExpiresAt time.Time
+}
+
 type User struct {
 	ID           uuid.UUID
 	Username     string

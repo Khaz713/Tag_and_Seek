@@ -49,6 +49,7 @@ type RegisterRequest struct {
 }
 
 type RegisterResponse struct {
-	UserId   string
+	UserID   string
+	Token    string
 	Username string
 }
