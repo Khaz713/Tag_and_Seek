@@ -41,3 +41,14 @@ func (q *Queries) DeleteSessionByToken(ctx context.Context, token uuid.UUID) err
 	_, err := q.db.ExecContext(ctx, deleteSessionByToken, token)
 	return err
 }
+
+const getSessionByToken = `-- name: GetSessionByToken :one
+SELECT token, user_id, expires_at FROM sessions WHERE token = $1
+`
+
+func (q *Queries) GetSessionByToken(ctx context.Context, token uuid.UUID) (Session, error) {
+	row := q.db.QueryRowContext(ctx, getSessionByToken, token)
+	var i Session
+	err := row.Scan(&i.Token, &i.UserID, &i.ExpiresAt)
+	return i, err
+}

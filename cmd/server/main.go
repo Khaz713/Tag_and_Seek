@@ -1,11 +1,13 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/Khaz713/Tag_and_Seek/internal/database"
 	"github.com/joho/godotenv"
@@ -45,9 +47,28 @@ func main() {
 	fmt.Println("Connected to database")
 	cfg.db = database.New(db)
 
+	//background sessions cleaner
+	go func() {
+		ticker := time.NewTicker(1 * time.Hour)
+		defer ticker.Stop()
+
+		err := cfg.db.DeleteExpiredSessions(context.Background())
+		if err != nil {
+			log.Printf("Failed to delete expired sessions: %v", err)
+		}
+
+		for range ticker.C {
+			err := cfg.db.DeleteExpiredSessions(context.Background())
+			if err != nil {
+				log.Printf("Failed to delete expired sessions: %v", err)
+			}
+		}
+	}()
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/register", cfg.handlerRegister)
 	mux.HandleFunc("POST /api/login", cfg.handlerLogin)
+	mux.HandleFunc("POST /api/logout", cfg.handlerLogout)
 
 	if port == "" {
 		port = "8080"

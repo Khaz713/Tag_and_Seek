@@ -1,5 +1,7 @@
 package routing
 
+import "time"
+
 type PlayerCommand struct { //the command that player sends to the server
 	PlayerID string
 	RoomID   string
@@ -52,4 +54,31 @@ type RegisterResponse struct {
 	UserID   string
 	Token    string
 	Username string
+}
+
+type LogoutRequest struct {
+	Token string
+}
+
+type TokenIdentification struct {
+	Token string
+}
+
+type GamePlayers struct {
+	UserID        string
+	Username      string
+	HiddenSeconds int
+	Ranking       int
+}
+type GameHistory struct {
+	GameID          string
+	MapIndex        int
+	WinnerID        string
+	DurationSeconds int
+	PlayedAt        time.Time
+	Players         []GamePlayers
+}
+
+type GameHistoryResponse struct {
+	Games []GameHistory
 }

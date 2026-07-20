@@ -7,6 +7,7 @@ package database
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -45,7 +46,7 @@ func (q *Queries) CreateGame(ctx context.Context, arg CreateGameParams) (Game, e
 	return i, err
 }
 
-const createGamePlayer = `-- name: CreateGamePlayer :one
+const createGameUser = `-- name: CreateGameUser :one
 INSERT INTO game_users(game_id, user_id, hidden_seconds, ranking)
 VALUES (
         $1,
@@ -56,15 +57,15 @@ VALUES (
 RETURNING game_id, user_id, hidden_seconds, ranking
 `
 
-type CreateGamePlayerParams struct {
+type CreateGameUserParams struct {
 	GameID        uuid.UUID
 	UserID        uuid.UUID
 	HiddenSeconds int32
 	Ranking       int32
 }
 
-func (q *Queries) CreateGamePlayer(ctx context.Context, arg CreateGamePlayerParams) (GameUser, error) {
-	row := q.db.QueryRowContext(ctx, createGamePlayer,
+func (q *Queries) CreateGameUser(ctx context.Context, arg CreateGameUserParams) (GameUser, error) {
+	row := q.db.QueryRowContext(ctx, createGameUser,
 		arg.GameID,
 		arg.UserID,
 		arg.HiddenSeconds,
@@ -78,4 +79,104 @@ func (q *Queries) CreateGamePlayer(ctx context.Context, arg CreateGamePlayerPara
 		&i.Ranking,
 	)
 	return i, err
+}
+
+const getGamesByUserID = `-- name: GetGamesByUserID :many
+SELECT id, map_index, winner_id, duration_seconds, played_at, game_id, user_id, hidden_seconds, ranking
+FROM games g
+JOIN game_users gu ON g.id = gu.game_id
+WHERE gu.user_id = $1
+ORDER BY g.played_at DESC
+`
+
+type GetGamesByUserIDRow struct {
+	ID              uuid.UUID
+	MapIndex        int32
+	WinnerID        uuid.NullUUID
+	DurationSeconds int32
+	PlayedAt        time.Time
+	GameID          uuid.UUID
+	UserID          uuid.UUID
+	HiddenSeconds   int32
+	Ranking         int32
+}
+
+func (q *Queries) GetGamesByUserID(ctx context.Context, userID uuid.UUID) ([]GetGamesByUserIDRow, error) {
+	rows, err := q.db.QueryContext(ctx, getGamesByUserID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetGamesByUserIDRow
+	for rows.Next() {
+		var i GetGamesByUserIDRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.MapIndex,
+			&i.WinnerID,
+			&i.DurationSeconds,
+			&i.PlayedAt,
+			&i.GameID,
+			&i.UserID,
+			&i.HiddenSeconds,
+			&i.Ranking,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getParticipantsByGameID = `-- name: GetParticipantsByGameID :many
+SELECT
+    u.id AS user_id,
+    u.username,
+    gu.hidden_seconds,
+    gu.ranking
+FROM game_users gu
+         JOIN users u ON gu.user_id = u.id
+WHERE gu.game_id = $1
+ORDER BY gu.ranking ASC
+`
+
+type GetParticipantsByGameIDRow struct {
+	UserID        uuid.UUID
+	Username      string
+	HiddenSeconds int32
+	Ranking       int32
+}
+
+func (q *Queries) GetParticipantsByGameID(ctx context.Context, gameID uuid.UUID) ([]GetParticipantsByGameIDRow, error) {
+	rows, err := q.db.QueryContext(ctx, getParticipantsByGameID, gameID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetParticipantsByGameIDRow
+	for rows.Next() {
+		var i GetParticipantsByGameIDRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.Username,
+			&i.HiddenSeconds,
+			&i.Ranking,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
