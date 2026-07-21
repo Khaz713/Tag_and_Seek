@@ -7,16 +7,20 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/Khaz713/Tag_and_Seek/internal/database"
+	"github.com/Khaz713/Tag_and_Seek/internal/gamelogic"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 type apiConfig struct {
-	db *database.Queries
+	db       *database.Queries
+	roomsMux sync.RWMutex
+	rooms    map[string]*gamelogic.GameRoom
 }
 
 func main() {
@@ -24,7 +28,9 @@ func main() {
 	dbURL := os.Getenv("dbURL")
 	port := os.Getenv("serverPort")
 	connStr := os.Getenv("connStr")
-	cfg := &apiConfig{}
+	cfg := &apiConfig{
+		rooms: make(map[string]*gamelogic.GameRoom),
+	}
 
 	fmt.Println("Connecting to RabbitMQ...")
 	conn, err := amqp.Dial(connStr)
@@ -69,6 +75,10 @@ func main() {
 	mux.HandleFunc("POST /api/register", cfg.handlerRegister)
 	mux.HandleFunc("POST /api/login", cfg.handlerLogin)
 	mux.HandleFunc("POST /api/logout", cfg.handlerLogout)
+	mux.HandleFunc("POST /api/history", cfg.handlerGameHistory)
+	mux.HandleFunc("POST /api/createRoom", cfg.handlerCreateRoom)
+	mux.HandleFunc("POST /api/getRooms", cfg.handlerGetRooms)
+	mux.HandleFunc("POST /api/joinRoom", cfg.handlerJoinRoom)
 
 	if port == "" {
 		port = "8080"

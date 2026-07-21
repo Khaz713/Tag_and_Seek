@@ -41,14 +41,28 @@ func (room *GameRoom) findSpawnPoint() (int, int) {
 	maxY := len(room.Map)
 	maxX := len(room.Map[0])
 
+	minDistanceFromCenter := 3
+
 	for {
 		x := rand.Intn(maxX)
 		y := rand.Intn(maxY)
 
-		if room.Map[y][x] == ' ' {
-			return x, y
+		if room.Map[y][x] == ' '{
+			distX := abs(x - (maxX / 2))
+			distY := abs(y - (maxY / 2))
+
+			if distX >= minDistanceFromCenter || distY >= minDistanceFromCenter {
+				return x, y
+			}
 		}
 	}
+}
+
+func abs(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
 }
 
 func (room *GameRoom) seekerSpawnPoint() (int, int) {
@@ -99,7 +113,7 @@ func (room *GameRoom) MovePlayer(playerID string, dx, dy int) error {
 		return errors.New("cannot move: movement on cooldown")
 	}
 
-	newX := player.X + dx + 1 //calculates new position
+	newX := player.X + dx //calculates new position
 	newY := player.Y + dy
 
 	//check if new position is in the bounds of the map

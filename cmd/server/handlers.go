@@ -2,9 +2,11 @@ package main
 
 import (
 	"database/sql"
+	"math/rand"
 	"net/http"
 
 	"github.com/Khaz713/Tag_and_Seek/internal/database"
+	"github.com/Khaz713/Tag_and_Seek/internal/gamelogic"
 	"github.com/google/uuid"
 	"github.com/lib/pq"
 	"golang.org/x/crypto/bcrypt"
@@ -159,5 +161,129 @@ func (cfg *apiConfig) handlerGameHistory(w http.ResponseWriter, r *http.Request)
 	writeResponseGob[routing.GameHistoryResponse](w, http.StatusOK, routing.GameHistoryResponse{
 		Games: history,
 	})
+}
 
+func (cfg *apiConfig) handlerCreateRoom(w http.ResponseWriter, r *http.Request) {
+	req, ok := decodeRequestGob[routing.CreateRoomRequest](w, r)
+	if !ok {
+		return
+	}
+	sessionUUID, err := uuid.Parse(req.Token)
+	if err != nil {
+		http.Error(w, "Invalid token", http.StatusUnauthorized)
+		return
+	}
+
+	session, err := cfg.db.GetSessionByToken(r.Context(), sessionUUID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "Invalid token", http.StatusUnauthorized)
+			return
+		}
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	cfg.roomsMux.Lock()
+	defer cfg.roomsMux.Unlock()
+	_, ok = cfg.rooms[req.Name]
+	if ok {
+		http.Error(w, "Room already exists", http.StatusConflict)
+		return
+	}
+	newRoom := gamelogic.GameRoom{
+		ID:         uuid.New().String(),
+		Map:        gamelogic.Maps[rand.Intn(len(gamelogic.Maps))],
+		Players:    make(map[string]*gamelogic.ServerPlayer),
+		State:      routing.StateLobby,
+		GameWinner: "",
+		Size:       req.Size,
+		Round:      0,
+	}
+	newRoom.AddPlayer(session.UserID.String())
+	cfg.rooms[req.Name] = &newRoom
+
+	writeResponseGob[routing.CreateRoomResponse](w, http.StatusCreated, routing.CreateRoomResponse{
+		RoomID: newRoom.ID,
+	})
+	//TODO make new rabbit and give client info to join
+}
+
+func (cfg *apiConfig) handlerGetRooms(w http.ResponseWriter, r *http.Request) {
+	req, ok := decodeRequestGob[routing.TokenIdentification](w, r)
+	if !ok {
+		return
+	}
+	sessionUUID, err := uuid.Parse(req.Token)
+	if err != nil {
+		http.Error(w, "Invalid token", http.StatusUnauthorized)
+		return
+	}
+
+	_, err = cfg.db.GetSessionByToken(r.Context(), sessionUUID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "Invalid token", http.StatusUnauthorized)
+			return
+		}
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	roomsInfo := []routing.RoomInfo{}
+	cfg.roomsMux.RLock()
+	for name, room := range cfg.rooms {
+		if room.State == routing.StateLobby {
+			roomsInfo = append(roomsInfo, routing.RoomInfo{
+				ID:         room.ID,
+				Name:       name,
+				Size:       room.Size,
+				PlayersNum: len(room.Players),
+			})
+		}
+	}
+	writeResponseGob[routing.GetRoomsResponse](w, http.StatusOK, routing.GetRoomsResponse{
+		Rooms: roomsInfo,
+	})
+}
+
+func (cfg *apiConfig) handlerJoinRoom(w http.ResponseWriter, r *http.Request) {
+	req, ok := decodeRequestGob[routing.JoinRoomRequest](w, r)
+	if !ok {
+		return
+	}
+	sessionUUID, err := uuid.Parse(req.Token)
+	if err != nil {
+		http.Error(w, "Invalid token", http.StatusUnauthorized)
+		return
+	}
+
+	session, err := cfg.db.GetSessionByToken(r.Context(), sessionUUID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "Invalid token", http.StatusUnauthorized)
+			return
+		}
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	cfg.roomsMux.Lock()
+	defer cfg.roomsMux.Unlock()
+	room, ok := cfg.rooms[req.RoomName]
+	if !ok {
+		http.Error(w, "Room not found", http.StatusNotFound)
+		return
+	}
+	if room.State != routing.StateLobby {
+		http.Error(w, "Game already in progress", http.StatusForbidden)
+		return
+	}
+	if len(room.Players) >= room.Size {
+		http.Error(w, "Room if full", http.StatusConflict)
+		return
+	}
+	room.AddPlayer(session.UserID.String())
+
+	writeResponseGob[routing.CreateRoomResponse](w, http.StatusOK, routing.CreateRoomResponse{
+		RoomID: room.ID, //temp response struct
+	})
+	//TODO give client info of rabbit queue to join
 }

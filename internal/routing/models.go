@@ -82,3 +82,28 @@ type GameHistory struct {
 type GameHistoryResponse struct {
 	Games []GameHistory
 }
+
+type CreateRoomRequest struct {
+	Token string
+	Name  string
+	Size  int
+}
+
+type CreateRoomResponse struct {
+	RoomID string
+}
+
+type RoomInfo struct {
+	ID         string
+	Name       string
+	Size       int
+	PlayersNum int
+}
+type GetRoomsResponse struct {
+	Rooms []RoomInfo
+}
+
+type JoinRoomRequest struct {
+	Token    string
+	RoomName string
+}
