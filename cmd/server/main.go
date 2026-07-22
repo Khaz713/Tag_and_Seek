@@ -12,15 +12,21 @@ import (
 
 	"github.com/Khaz713/Tag_and_Seek/internal/database"
 	"github.com/Khaz713/Tag_and_Seek/internal/gamelogic"
+	"github.com/Khaz713/Tag_and_Seek/internal/pubsub"
+	"github.com/Khaz713/Tag_and_Seek/internal/routing"
+	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 type apiConfig struct {
-	db       *database.Queries
-	roomsMux sync.RWMutex
-	rooms    map[string]*gamelogic.GameRoom
+	db         *database.Queries
+	dbPool     *sql.DB
+	roomsMux   sync.RWMutex
+	rooms      map[string]*gamelogic.GameRoom
+	channelMux sync.RWMutex
+	channel    *amqp.Channel
 }
 
 func main() {
@@ -40,6 +46,30 @@ func main() {
 	defer conn.Close()
 	fmt.Println("Connected to RabbitMQ")
 
+	fmt.Println("Opening channel...")
+	channel, err := conn.Channel()
+	if err != nil {
+		log.Fatalf("Failed to open a channel: %v", err)
+	}
+	cfg.channel = channel
+	defer channel.Close()
+	fmt.Println("Connected to channel")
+	fmt.Println("Declaring queue...")
+	_, err = channel.QueueDeclare(
+		routing.GameResultQueue,
+		true,
+		false,
+		false,
+		false,
+		amqp.Table{
+			"x-queue-type": "quorum",
+		},
+	)
+	if err != nil {
+		log.Fatalf("Failed to declare a queue: %v", err)
+	}
+	fmt.Println("Declared queue")
+
 	fmt.Println("Connecting to database ...")
 	db, err := sql.Open("postgres", dbURL)
 	if err != nil {
@@ -52,6 +82,7 @@ func main() {
 	}
 	fmt.Println("Connected to database")
 	cfg.db = database.New(db)
+	cfg.dbPool = db
 
 	//background sessions cleaner
 	go func() {
@@ -70,6 +101,48 @@ func main() {
 			}
 		}
 	}()
+
+	err = pubsub.SubscribeGameResult(conn, func(result routing.GameResult) error {
+		gameId, err := uuid.Parse(result.GameID)
+		if err != nil {
+			return err
+		}
+		winnerId, err := uuid.Parse(result.WinnerID)
+		if err != nil {
+			return err
+		}
+		tx, err := cfg.dbPool.BeginTx(context.Background(), nil)
+		if err != nil {
+			return fmt.Errorf("failed to begin transaction: %w", err)
+		}
+		defer tx.Rollback()
+
+		qtx := cfg.db.WithTx(tx)
+
+		_, err = qtx.CreateGame(context.Background(), database.CreateGameParams{
+			ID:              gameId,
+			MapIndex:        int32(result.MapIndex),
+			WinnerID:        uuid.NullUUID{UUID: winnerId},
+			DurationSeconds: int32(result.Duration),
+		})
+		for _, player := range result.Players {
+			userId, err := uuid.Parse(player.PlayerID)
+			if err != nil {
+				return err
+			}
+			_, err = qtx.CreateGameUser(context.Background(), database.CreateGameUserParams{
+				GameID:        gameId,
+				UserID:        userId,
+				HiddenSeconds: int32(player.Duration),
+				Ranking:       int32(player.Ranking),
+			})
+		}
+		err = tx.Commit()
+		if err != nil {
+			return fmt.Errorf("failed to commit transaction: %w", err)
+		}
+		return nil
+	})
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/register", cfg.handlerRegister)

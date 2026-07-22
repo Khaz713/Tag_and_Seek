@@ -40,9 +40,12 @@ type PlayerEnd struct {
 	Ranking  int
 }
 type GameResult struct {
-	WinnerID PlayerEnd
-	LooserID []PlayerEnd
+	GameID   string
+	WinnerID string
+	Players  []PlayerEnd
 	Duration int
+	MapIndex int
+	PlayedAt time.Time
 }
 
 type RegisterRequest struct {

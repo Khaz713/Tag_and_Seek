@@ -2,7 +2,7 @@
 
 NETWORK_NAME="tag-and-seek-cluster"
 COOKIE="9701713"
-CONTAINERS=("rabbit1" "rabbit2" "rabbit3" "postgres")
+CONTAINERS=("rabbit1" "rabbit2" "rabbit3" "haproxy" "postgres")
 
 POSTGRES_USER="postgres"
 POSTGRES_PASSWORD="postgres"
@@ -55,11 +55,27 @@ start_or_create_postgres() {
   fi
 }
 
+start_or_create_haproxy() {
+  if docker container inspect "haproxy" >/dev/null 2>&1; then
+    echo "Container 'haproxy' already exists. Starting it..."
+    docker start "haproxy"
+  else
+    echo "Container 'haproxy' not found. Creating it..."
+    docker run -d \
+      --name "haproxy" \
+      --network "$NETWORK_NAME" \
+      -p 5672:5672 \
+      -p 15672:15672 \
+      -v "$(pwd)/haproxy.cfg":/usr/local/etc/haproxy/haproxy.cfg:ro \
+      haproxy:latest
+  fi
+}
+
 do_start() {
   docker network inspect "$NETWORK_NAME" >/dev/null 2>&1 || \
     docker network create "$NETWORK_NAME"
 
-  start_or_create "rabbit1" "-p 5672:5672 -p 15672:15672"
+  start_or_create "rabbit1" ""
   rabbit1_new=$?
 
   start_or_create "rabbit2" ""
@@ -86,6 +102,7 @@ do_start() {
     docker exec rabbit3 rabbitmqctl join_cluster rabbit@rabbit1
     docker exec rabbit3 rabbitmqctl start_app
   fi
+  start_or_create_haproxy
 }
 
 do_stop() {

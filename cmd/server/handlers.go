@@ -190,9 +190,11 @@ func (cfg *apiConfig) handlerCreateRoom(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "Room already exists", http.StatusConflict)
 		return
 	}
+	mapIndex := rand.Intn(len(gamelogic.Maps))
 	newRoom := gamelogic.GameRoom{
 		ID:         uuid.New().String(),
-		Map:        gamelogic.Maps[rand.Intn(len(gamelogic.Maps))],
+		MapIndex:   mapIndex,
+		Map:        gamelogic.Maps[mapIndex],
 		Players:    make(map[string]*gamelogic.ServerPlayer),
 		State:      routing.StateLobby,
 		GameWinner: "",

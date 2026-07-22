@@ -18,23 +18,26 @@ const (
 )
 
 type ServerPlayer struct {
-	ID           string
-	X            int
-	Y            int
-	IsSeeker     bool
-	IsPlaying    bool
-	BeenSeeker   bool
-	LastMoveTime time.Time
+	ID              string
+	X               int
+	Y               int
+	IsSeeker        bool
+	IsPlaying       bool
+	BeenSeeker      bool
+	LastMoveTime    time.Time
+	TotalHiddenTime int
 }
 
 type GameRoom struct {
-	ID         string
-	Map        []string
-	Players    map[string]*ServerPlayer
-	State      routing.RoomState
-	GameWinner string
-	Size       int
-	Round      int
+	ID              string
+	MapIndex        int
+	Map             []string
+	Players         map[string]*ServerPlayer
+	State           routing.RoomState
+	GameWinner      string
+	Size            int
+	Round           int
+	DurationSeconds int
 }
 
 func (room *GameRoom) findSpawnPoint() (int, int) {
@@ -47,7 +50,7 @@ func (room *GameRoom) findSpawnPoint() (int, int) {
 		x := rand.Intn(maxX)
 		y := rand.Intn(maxY)
 
-		if room.Map[y][x] == ' '{
+		if room.Map[y][x] == ' ' {
 			distX := abs(x - (maxX / 2))
 			distY := abs(y - (maxY / 2))
 
